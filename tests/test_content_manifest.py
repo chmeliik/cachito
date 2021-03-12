@@ -11,6 +11,8 @@ from cachito.web.models import Package, Request, RequestPackage
 GIT_REPO = "https://github.com/namespace/repo"
 GIT_REF = "1798a59f297f5f3886e41bc054e538540581f8ce"
 
+DEFAULT_TOPLEVEL_PURL = f"pkg:github/namespace/repo@{GIT_REF}"
+
 
 @pytest.fixture
 def default_request():
@@ -21,7 +23,7 @@ def default_request():
 @pytest.fixture
 def default_toplevel_purl():
     """Get VCS purl for default request."""
-    return f"pkg:github/namespace/repo@{GIT_REF}"
+    return DEFAULT_TOPLEVEL_PURL
 
 
 def test_process_go(default_request):
@@ -796,8 +798,6 @@ def test_vcs_purl_conversion(repo_url, expected_purl):
 @pytest.mark.parametrize(
     "pkg_type, purl_method, method_args",
     [
-        ("gomod", "to_purl", []),
-        ("go-package", "to_purl", []),
         ("npm", "to_vcs_purl", [GIT_REPO, GIT_REF]),
         ("pip", "to_vcs_purl", [GIT_REPO, GIT_REF]),
         ("yarn", "to_vcs_purl", [GIT_REPO, GIT_REF]),
@@ -827,3 +827,51 @@ def test_top_level_purl_conversion(
             assert purl == "pkg:generic/foo#some/path"
         else:
             assert purl == "pkg:generic/foo"
+
+
+@pytest.mark.parametrize("pkg_type", ["gomod", "go-package"])
+@pytest.mark.parametrize(
+    "name, subpath, expect_purl",
+    [
+        ("github.com/org/repo", None, "pkg:golang/github.com%2Forg%2Frepo@v1.0.0"),
+        # This should probably be a vcs purl, but won't be (did I mention the heuristic was weak?)
+        ("github.com/org/repo", "repo", "pkg:golang/github.com%2Forg%2Frepo@v1.0.0"),
+        # Likewise
+        (
+            "github.com/org/repo/submodule",
+            None,
+            "pkg:golang/github.com%2Forg%2Frepo%2Fsubmodule@v1.0.0",
+        ),
+        # Behold, these sort of make sense
+        (
+            "github.com/org/repo/submodule",
+            "submodule",
+            "pkg:golang/github.com%2Forg%2Frepo%2Fsubmodule@v1.0.0",
+        ),
+        (
+            "github.com/org/repo/submodule/subpackage",
+            "submodule/subpackage",  # Can a subpackage be a Package? Only Dependency, right?
+            "pkg:golang/github.com%2Forg%2Frepo%2Fsubmodule%2Fsubpackage@v1.0.0",
+        ),
+        (
+            "github.com/org/repo/submodule/v2",
+            "submodule",
+            "pkg:golang/github.com%2Forg%2Frepo%2Fsubmodule%2Fv2@v1.0.0",
+        ),
+        # This should probably be a golang purl, but won't be
+        (
+            "github/com/org/repo/submodule/v2/subpackage",
+            "submodule/subpackage",
+            f"{DEFAULT_TOPLEVEL_PURL}#submodule/subpackage",
+        ),
+        # VCS purl that actually makes sense
+        (
+            "github.com/org/other-repo",
+            "staging/src/other-repo",
+            f"{DEFAULT_TOPLEVEL_PURL}#staging/src/other-repo",
+        ),
+    ],
+)
+def test_top_level_purl_gomod(name, pkg_type, subpath, expect_purl, default_request):
+    pkg = Package(name=name, version="v1.0.0", type=pkg_type)
+    assert pkg.to_top_level_purl(default_request, subpath=subpath) == expect_purl

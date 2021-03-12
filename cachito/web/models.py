@@ -323,15 +323,30 @@ class Package(db.Model):
         :return: the PURL string of the Package object
         :rtype: str
         """
-        if self.type in ("gomod", "go-package", "git-submodule"):
+        include_subpath = True
+
+        if self.type in ("gomod", "go-package"):
+            # If the package name reflects the path within the repo, use a golang purl, otherwise,
+            # use a vcs purl. This is a weak heuristic. To check if the name actually forms a valid
+            # purl, we would have to `go get` it and make sure that we are getting the contents of
+            # the request repo. Also, there is no way to tell which part of the name is supposed to
+            # be the subpath.
+            if not subpath or re.search(rf"/{re.escape(subpath)}(/v\d+)?$", self.name):
+                purl = self.to_purl()
+                include_subpath = False
+            else:
+                purl = self.to_vcs_purl(request.repo, request.ref)
+
+        elif self.type == "git-submodule":
             purl = self.to_purl()
+            # purls for git submodules point to a different repo, path is neither needed nor valid
+            include_subpath = False
         elif self.type in ("npm", "pip", "yarn"):
             purl = self.to_vcs_purl(request.repo, request.ref)
         else:
             raise ContentManifestError(f"{self.type!r} is not a valid top level package")
 
-        # purls for git submodules point to a different repo, subpath is neither needed nor valid
-        if subpath and self.type != "git-submodule":
+        if subpath and include_subpath:
             purl = f"{purl}#{subpath}"
 
         return purl
