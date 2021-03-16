@@ -117,6 +117,10 @@ class DevelopmentConfig(Config):
     cachito_yarn_file_deps_allowlist = {"cachito-yarn-test": ["subpackage"]}
     cachito_gomod_file_deps_allowlist = {
         "github.com/cachito-testing/cachito-gomod-local-deps": ["github.com/cachito-testing/*"],
+        "github.com/chmeliik/gomod-multi/correct_with_local": ["*"],
+        "github.com/chmeliik/gomod-multi/wrong_with_local": ["*"],
+        "github.com/chmeliik/gomod-multi/correct_v2_local": ["*"],
+        "github.com/chmeliik/gomod-multi/wrong_v2_local": ["*"],
     }
     cachito_request_file_logs_dir = "/var/log/cachito/requests"
     cachito_sources_dir = os.path.join(ARCHIVES_VOLUME, "sources")
