@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+import os.path
+from typing import Optional
+
 import flask
 
 from cachito.web.utils import deep_sort_icm
@@ -39,6 +42,9 @@ class ContentManifest:
         # package
         self._gitsubmodule_data = {}
 
+        # cache for matching go packages to their parent modules
+        self._gopkg_to_parent_gomod = {}
+
     def process_gomod(self, package, dependency):
         """
         Process gomod package.
@@ -47,8 +53,12 @@ class ContentManifest:
         :param Dependency dependency: the gomod package dependency to process
         """
         if dependency.type == "gomod":
-            parent_purl = self._gomod_data[package.name]["purl"]
-            dep_purl = dependency.to_purl().replace(PARENT_PURL_PLACEHOLDER, parent_purl)
+            if dependency.version.startswith("."):
+                parent_purl = self._gomod_data[package.name]["purl"]
+                dep_purl = _add_subpath(parent_purl, dependency.version)
+            else:
+                dep_purl = dependency.to_purl()
+
             icm_source = {"purl": dep_purl}
             self._gomod_data[package.name]["dependencies"].append(icm_source)
 
@@ -60,7 +70,24 @@ class ContentManifest:
         :param Dependency dependency: the go-package package dependency to process
         """
         if dependency.type == "go-package":
-            icm_dependency = {"purl": dependency.to_purl()}
+            module_name = self._get_parent_go_module(package.name)
+            module_purl = self._gomod_data[module_name]["purl"] if module_name else None
+
+            if module_purl and dependency.version.startswith("."):
+                dep_purl = _add_subpath(module_purl, dependency.version)
+            elif (
+                module_purl
+                and not module_purl.startswith("pkg:golang")
+                and dependency.name.startswith(module_name)
+            ):
+                # If the parent module uses a vcs purl and the dependency belongs to the module,
+                # also use a vcs purl for the dependency
+                subpath = gomod.path_to_subpackage(module_name, dependency.name)
+                dep_purl = _add_subpath(module_purl, subpath)
+            else:
+                dep_purl = dependency.to_purl()
+
+            icm_dependency = {"purl": dep_purl}
             self._gopkg_data[package.id]["dependencies"].append(icm_dependency)
 
     def set_go_package_sources(self):
@@ -74,20 +101,27 @@ class ContentManifest:
         """
         for package_id, pkg_data in self._gopkg_data.items():
             pkg_name = pkg_data.pop("name")
-
-            if pkg_name in self._gomod_data:
-                module_name = pkg_name
-            else:
-                module_name = gomod.match_parent_module(pkg_name, self._gomod_data.keys())
+            module_name = self._get_parent_go_module(pkg_name)
 
             if module_name is not None:
                 module = self._gomod_data[module_name]
                 self._gopkg_data[package_id]["sources"] = module["dependencies"]
                 self._replace_parent_purl_gopkg(self._gopkg_data[package_id], module["purl"])
-            else:
-                flask.current_app.logger.warning(
-                    "Could not find a Go module for %s", pkg_data["purl"]
-                )
+
+    def _get_parent_go_module(self, go_pkg_name: str) -> Optional[str]:
+        if go_pkg_name in self._gopkg_to_parent_gomod:
+            return self._gopkg_to_parent_gomod[go_pkg_name]
+
+        if go_pkg_name in self._gomod_data:
+            module_name = go_pkg_name
+        else:
+            module_name = gomod.match_parent_module(go_pkg_name, self._gomod_data.keys())
+
+        if module_name is None:
+            flask.current_app.logger.warning("Could not find a Go module for %s", go_pkg_name)
+
+        self._gopkg_to_parent_gomod[go_pkg_name] = module_name
+        return module_name
 
     def _replace_parent_purl_gopkg(self, go_pkg: dict, module_purl: str):
         """
@@ -226,3 +260,11 @@ class ContentManifest:
         icm["image_contents"] = image_contents or []
 
         return deep_sort_icm(icm)
+
+
+def _add_subpath(purl: str, subpath: str) -> str:
+    normpath = os.path.normpath(subpath)
+    if "#" in purl:
+        return f"{purl}/{normpath}"
+    else:
+        return f"{purl}#{normpath}"

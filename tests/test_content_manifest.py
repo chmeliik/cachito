@@ -48,7 +48,7 @@ def test_process_go(default_request):
     cm = ContentManifest(default_request)
 
     # emulate to_json behavior to setup internal packages cache
-    cm._gomod_data.setdefault(pkg.name, {"purl": "not-important", "dependencies": []})
+    cm._gomod_data.setdefault(pkg.name, {"purl": "pkg:golang/not-important", "dependencies": []})
     cm._gopkg_data.setdefault(
         pkg.id, {"name": pkg.name, "purl": expected_purl, "dependencies": [], "sources": []}
     )
@@ -434,7 +434,7 @@ def test_set_go_package_sources(mock_warning, app, pkg_name, gomod_data, warn, d
     assert cm._gopkg_data == expected
 
     if warn:
-        mock_warning.assert_called_once_with("Could not find a Go module for %s", main_purl)
+        mock_warning.assert_called_once_with("Could not find a Go module for %s", pkg_name)
     else:
         mock_warning.assert_not_called()
 
