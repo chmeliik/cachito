@@ -9,7 +9,6 @@ import kombu.exceptions
 import pytest
 
 from cachito.errors import CachitoError, ValidationError
-from cachito.web.content_manifest import PARENT_PURL_PLACEHOLDER
 from cachito.web.models import (
     ConfigFileBase64,
     EnvironmentVariable,
@@ -1790,11 +1789,11 @@ def test_fetch_request_content_manifest_go(
 
     for d in sample_deps:
         d.pop("replaces")
-        p = Package.from_json(d).to_purl().replace(PARENT_PURL_PLACEHOLDER, main_pkg)
+        p = Package.from_json(d).to_purl()
         image_content["sources"].append({"purl": p})
     for d in sample_pkg_deps:
         d.pop("replaces")
-        p = Package.from_json(d).to_purl().replace(PARENT_PURL_PLACEHOLDER, main_pkg)
+        p = Package.from_json(d).to_purl()
         image_content["dependencies"].append({"purl": p})
 
     expected = {

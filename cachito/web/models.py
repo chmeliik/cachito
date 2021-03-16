@@ -199,9 +199,8 @@ class Package(db.Model):
         """
         if self.type in ("go-package", "gomod"):
             if self.version.startswith("."):
-                # Package is relative to the parent module
-                normpath = os.path.normpath(self.version)
-                return f"{content_manifest.PARENT_PURL_PLACEHOLDER}#{normpath}"
+                # Package is relative to the parent module, which is unkown at this point
+                return "UNKNOWN"
 
             # Use only the PURL "name" field to avoid ambiguity for Go modules/packages
             # see https://github.com/package-url/purl-spec/issues/63 for further reference

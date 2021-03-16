@@ -8,9 +8,6 @@ from cachito.web.utils import deep_sort_icm
 from cachito.workers.pkg_managers import gomod
 
 
-PARENT_PURL_PLACEHOLDER = "PARENT_PURL"
-
-
 class ContentManifest:
     """A content manifest associated with a Cacihto request."""
 
@@ -106,7 +103,6 @@ class ContentManifest:
             if module_name is not None:
                 module = self._gomod_data[module_name]
                 self._gopkg_data[package_id]["sources"] = module["dependencies"]
-                self._replace_parent_purl_gopkg(self._gopkg_data[package_id], module["purl"])
 
     def _get_parent_go_module(self, go_pkg_name: str) -> Optional[str]:
         if go_pkg_name in self._gopkg_to_parent_gomod:
@@ -122,17 +118,6 @@ class ContentManifest:
 
         self._gopkg_to_parent_gomod[go_pkg_name] = module_name
         return module_name
-
-    def _replace_parent_purl_gopkg(self, go_pkg: dict, module_purl: str):
-        """
-        Replace PARENT_PURL_PLACEHOLDER in go-package dependencies with the parent module purl.
-
-        The purl of the package itself cannot contain a placeholder. The purls of all of its
-        sources will have been replaced at this point already (they come from the parent module).
-        Only dependencies need to be replaced here.
-        """
-        for dep in go_pkg["dependencies"]:
-            dep["purl"] = dep["purl"].replace(PARENT_PURL_PLACEHOLDER, module_purl)
 
     def process_npm_package(self, package, dependency):
         """
